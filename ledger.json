@@ -24,17 +24,17 @@
         },
         {
             "user": "Saraansh",
-            "type": "You Paid - In Full for Them (You're owed all of it)",
-            "amount": 2.25,
-            "reason": "kit kat",
-            "timestamp": "2025-06-04T14:39:06"
-        },
-        {
-            "user": "Saraansh",
             "type": "They Paid - Split 50/50",
             "amount": 33.0,
             "reason": "indian food",
             "timestamp": "2025-06-04T14:39:18"
+        },
+        {
+            "user": "Saraansh",
+            "type": "You Paid - In Full for Them (You're owed all of it)",
+            "amount": 2.25,
+            "reason": "kit kat",
+            "timestamp": "2025-06-04T15:39:57"
         }
     ]
 }

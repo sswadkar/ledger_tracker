@@ -142,3 +142,56 @@ else:
             desc += f" for _{t['reason']}_"
         desc += f" — {t['timestamp']}"
         st.markdown(desc)
+
+# Delete Transaction
+st.markdown("---")
+st.subheader("🗑️ Delete a Transaction")
+
+if ledger["transactions"]:
+    # Create readable labels for all transactions
+    def format_transaction(t):
+        base = f"{t['user']} - {t['type']} - ${t['amount']:.2f}"
+        if t["reason"]:
+            base += f" for {t['reason']}"
+        base += f" ({t['timestamp']})"
+        return base
+
+    transaction_map = {format_transaction(t): t for t in reversed(ledger["transactions"])}
+    selected_label = st.selectbox("Select a transaction to delete:", list(transaction_map.keys()))
+    confirm = st.checkbox("Are you sure you want to delete this transaction?")
+
+    if st.button("Delete Transaction") and confirm:
+        target = transaction_map[selected_label]
+        ledger["transactions"].remove(target)
+
+        # Reverse its effect on balances
+        if target["user"] == person_a_name:
+            me, them = "person_a", "person_b"
+        else:
+            me, them = "person_b", "person_a"
+
+        amt = target["amount"]
+        type_ = target["type"]
+
+        if type_ == "You Paid - Split 50/50":
+            ledger[me]["balance"] -= amt / 2
+            ledger[them]["balance"] += amt / 2
+        elif type_ == "You Paid - In Full for Them (You're owed all of it)":
+            ledger[me]["balance"] -= amt
+            ledger[them]["balance"] += amt
+        elif type_ == "They Paid - Split 50/50":
+            ledger[me]["balance"] += amt / 2
+            ledger[them]["balance"] -= amt / 2
+        elif type_ == "They Paid - In Full for You (You owe all of it)":
+            ledger[me]["balance"] += amt
+            ledger[them]["balance"] -= amt
+        elif type_ == "They Paid You (Settlement)":
+            ledger[me]["balance"] += amt
+            ledger[them]["balance"] -= amt
+        elif type_ == "You Paid Them (Settlement)":
+            ledger[me]["balance"] -= amt
+            ledger[them]["balance"] += amt
+
+        save_ledger(ledger)
+        st.success("Transaction deleted.")
+        st.rerun()
