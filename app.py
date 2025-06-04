@@ -48,7 +48,7 @@ if st.session_state["user"] is None:
     chosen = st.selectbox("Who are you?", [person_a_name, person_b_name])
     if st.button("Continue"):
         st.session_state["user"] = chosen
-        st.experimental_rerun()
+        st.rerun()
     st.stop()
 
 user = st.session_state["user"]
