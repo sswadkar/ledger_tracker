@@ -1,0 +1,144 @@
+import streamlit as st
+import json
+import os
+from datetime import datetime
+
+SETTINGS_FILE = "settings.json"
+LEDGER_FILE = "ledger.json"
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    else:
+        return {"person_a_name": "Alice", "person_b_name": "Bob"}
+
+def load_ledger():
+    if os.path.exists(LEDGER_FILE):
+        with open(LEDGER_FILE, "r") as f:
+            return json.load(f)
+    else:
+        return {
+            "person_a": {"name": "Alice", "balance": 0.0},
+            "person_b": {"name": "Bob", "balance": 0.0},
+            "transactions": []
+        }
+
+def save_ledger(ledger):
+    with open(LEDGER_FILE, "w") as f:
+        json.dump(ledger, f, indent=4)
+
+# Load settings and ledger
+settings = load_settings()
+person_a_name = settings["person_a_name"]
+person_b_name = settings["person_b_name"]
+ledger = load_ledger()
+
+ledger["person_a"]["name"] = person_a_name
+ledger["person_b"]["name"] = person_b_name
+
+# Persist identity across session
+if "user" not in st.session_state:
+    st.session_state["user"] = None
+
+# Blocking identity selection
+if st.session_state["user"] is None:
+    st.title("👋 Welcome to Split Tracker")
+    st.subheader("Please select your name to continue:")
+    chosen = st.selectbox("Who are you?", [person_a_name, person_b_name])
+    if st.button("Continue"):
+        st.session_state["user"] = chosen
+        st.experimental_rerun()
+    st.stop()
+
+user = st.session_state["user"]
+
+# Title
+st.title("💸 Split Tracker")
+st.markdown(f"### Logged in as: **{user}**")
+
+# New Transaction
+st.markdown("---")
+st.subheader("New Transaction")
+
+col1, col2 = st.columns(2)
+with col1:
+    amount = st.number_input("Amount", min_value=0.01, step=0.01)
+with col2:
+    transaction_type = st.selectbox("Type", [
+        "You Paid - Split 50/50", 
+        "You Paid - In Full for Them (You're owed all of it)", 
+        "They Paid - Split 50/50", 
+        "They Paid - In Full for You (You owe all of it)",
+        "They Paid You (Settlement)",
+        "You Paid Them (Settlement)"
+    ])
+
+reason = st.text_input("Optional Reason (e.g., dinner, Uber, etc.)")
+
+if st.button("Add Transaction"):
+    if user == person_a_name:
+        me, them = "person_a", "person_b"
+    else:
+        me, them = "person_b", "person_a"
+
+    # Balance logic
+    if transaction_type == "You Paid - Split 50/50":
+        ledger[me]["balance"] += amount / 2
+        ledger[them]["balance"] -= amount / 2
+    elif transaction_type == "You Paid - In Full for Them (You're owed all of it)":
+        ledger[me]["balance"] += amount
+        ledger[them]["balance"] -= amount
+    elif transaction_type == "They Paid - Split 50/50":
+        ledger[me]["balance"] -= amount / 2
+        ledger[them]["balance"] += amount / 2
+    elif transaction_type == "They Paid - In Full for You (You owe all of it)":
+        ledger[me]["balance"] -= amount
+        ledger[them]["balance"] += amount
+    elif transaction_type == "They Paid You (Settlement)":
+        ledger[me]["balance"] -= amount
+        ledger[them]["balance"] += amount
+    elif transaction_type == "You Paid Them (Settlement)":
+        ledger[me]["balance"] += amount
+        ledger[them]["balance"] -= amount
+
+    # Add to transaction log
+    ledger["transactions"].append({
+        "user": user,
+        "type": transaction_type,
+        "amount": round(amount, 2),
+        "reason": reason.strip(),
+        "timestamp": datetime.now().isoformat(timespec='seconds')
+    })
+
+    save_ledger(ledger)
+    st.success("Transaction recorded!")
+
+# Ledger summary
+st.markdown("---")
+st.header("📒 Ledger Summary")
+st.write(f"**{ledger['person_a']['name']}** balance: ${ledger['person_a']['balance']:.2f}")
+st.write(f"**{ledger['person_b']['name']}** balance: ${ledger['person_b']['balance']:.2f}")
+
+# Settlement suggestion
+st.markdown("### 🤝 Settlement Suggestion")
+net = ledger["person_a"]["balance"]
+if net > 0:
+    st.write(f"💰 **{ledger['person_b']['name']}** owes **{ledger['person_a']['name']}**: **${net:.2f}**")
+elif net < 0:
+    st.write(f"💰 **{ledger['person_a']['name']}** owes **{ledger['person_b']['name']}**: **${-net:.2f}**")
+else:
+    st.write("✅ All settled up!")
+
+# Recent Transactions
+st.markdown("---")
+st.subheader("🧾 Recent Transactions")
+if not ledger["transactions"]:
+    st.write("No transactions yet.")
+else:
+    for t in reversed(ledger["transactions"][-10:]):
+        desc = f"**{t['user']}** → *{t['type']}* (${t['amount']:.2f})"
+        if t["reason"]:
+            desc += f" for _{t['reason']}_"
+        desc += f" — {t['timestamp']}"
+        st.markdown(desc)
