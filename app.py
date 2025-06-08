@@ -2,9 +2,18 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
+from pymongo import MongoClient
+
+from dotenv import load_dotenv
+load_dotenv()
 
 SETTINGS_FILE = "settings.json"
-LEDGER_FILE = "ledger.json"
+MONGO_URI = os.getenv("MONGO_URI")
+
+# MongoDB setup
+client = MongoClient(MONGO_URI)
+db = client["split_tracker"]
+collection = db["ledger"]
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -14,26 +23,27 @@ def load_settings():
         return {"person_a_name": "Alice", "person_b_name": "Bob"}
 
 def load_ledger():
-    if os.path.exists(LEDGER_FILE):
-        with open(LEDGER_FILE, "r") as f:
-            return json.load(f)
+    data = collection.find_one({"_id": "ledger"})
+    if data:
+        data.pop("_id", None)
+        return data
     else:
-        return {
+        default = {
             "person_a": {"name": "Alice", "balance": 0.0},
             "person_b": {"name": "Bob", "balance": 0.0},
             "transactions": []
         }
+        collection.insert_one({**default, "_id": "ledger"})
+        return default
 
 def save_ledger(ledger):
-    with open(LEDGER_FILE, "w") as f:
-        json.dump(ledger, f, indent=4)
+    collection.replace_one({"_id": "ledger"}, {**ledger, "_id": "ledger"}, upsert=True)
 
 # Load settings and ledger
 settings = load_settings()
 person_a_name = settings["person_a_name"]
 person_b_name = settings["person_b_name"]
 ledger = load_ledger()
-
 ledger["person_a"]["name"] = person_a_name
 ledger["person_b"]["name"] = person_b_name
 
@@ -41,7 +51,6 @@ ledger["person_b"]["name"] = person_b_name
 if "user" not in st.session_state:
     st.session_state["user"] = None
 
-# Blocking identity selection
 if st.session_state["user"] is None:
     st.title("👋 Welcome to Split Tracker")
     st.subheader("Please select your name to continue:")
@@ -60,15 +69,14 @@ st.markdown(f"### Logged in as: **{user}**")
 # New Transaction
 st.markdown("---")
 st.subheader("New Transaction")
-
 col1, col2 = st.columns(2)
 with col1:
     amount = st.number_input("Amount", min_value=0.01, step=0.01)
 with col2:
     transaction_type = st.selectbox("Type", [
-        "You Paid - Split 50/50", 
-        "You Paid - In Full for Them (You're owed all of it)", 
-        "They Paid - Split 50/50", 
+        "You Paid - Split 50/50",
+        "You Paid - In Full for Them (You're owed all of it)",
+        "They Paid - Split 50/50",
         "They Paid - In Full for You (You owe all of it)",
         "They Paid You (Settlement)",
         "You Paid Them (Settlement)"
@@ -77,10 +85,7 @@ with col2:
 reason = st.text_input("Optional Reason (e.g., dinner, Uber, etc.)")
 
 if st.button("Add Transaction"):
-    if user == person_a_name:
-        me, them = "person_a", "person_b"
-    else:
-        me, them = "person_b", "person_a"
+    me, them = ("person_a", "person_b") if user == person_a_name else ("person_b", "person_a")
 
     # Balance logic
     if transaction_type == "You Paid - Split 50/50":
@@ -102,7 +107,6 @@ if st.button("Add Transaction"):
         ledger[me]["balance"] += amount
         ledger[them]["balance"] -= amount
 
-    # Add to transaction log
     ledger["transactions"].append({
         "user": user,
         "type": transaction_type,
@@ -113,14 +117,15 @@ if st.button("Add Transaction"):
 
     save_ledger(ledger)
     st.success("Transaction recorded!")
+    st.rerun()
 
-# Ledger summary
+# Ledger Summary
 st.markdown("---")
 st.header("📒 Ledger Summary")
 st.write(f"**{ledger['person_a']['name']}** balance: ${ledger['person_a']['balance']:.2f}")
 st.write(f"**{ledger['person_b']['name']}** balance: ${ledger['person_b']['balance']:.2f}")
 
-# Settlement suggestion
+# Settlement
 st.markdown("### 🤝 Settlement Suggestion")
 net = ledger["person_a"]["balance"]
 if net > 0:
@@ -148,7 +153,6 @@ st.markdown("---")
 st.subheader("🗑️ Delete a Transaction")
 
 if ledger["transactions"]:
-    # Create readable labels for all transactions
     def format_transaction(t):
         base = f"{t['user']} - {t['type']} - ${t['amount']:.2f}"
         if t["reason"]:
@@ -164,12 +168,7 @@ if ledger["transactions"]:
         target = transaction_map[selected_label]
         ledger["transactions"].remove(target)
 
-        # Reverse its effect on balances
-        if target["user"] == person_a_name:
-            me, them = "person_a", "person_b"
-        else:
-            me, them = "person_b", "person_a"
-
+        me, them = ("person_a", "person_b") if target["user"] == person_a_name else ("person_b", "person_a")
         amt = target["amount"]
         type_ = target["type"]
 
