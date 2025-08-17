@@ -13,7 +13,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 # MongoDB setup
 client = MongoClient(MONGO_URI)
 db = client["split_tracker"]
-collection = db["ledger"]
+collection = db["ledger_anay"]
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
